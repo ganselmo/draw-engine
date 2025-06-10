@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { UsersModule } from './users/users.module';
+import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { DrawModule } from './draw/draw.module';
 import { SharedModule } from './shared/shared.module';
@@ -9,13 +9,9 @@ import { TicketModule } from './ticket/ticket.module';
 
 @Module({
   imports: [
-    UsersModule,
-    AuthModule,
-    DrawModule,
-    SharedModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath:'.env.local',
+      envFilePath: '.env.local',
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
@@ -30,8 +26,11 @@ import { TicketModule } from './ticket/ticket.module';
         synchronize: true,
       }),
     }),
+    UserModule,
+    AuthModule,
+    DrawModule,
+    SharedModule,
     TicketModule,
   ],
 })
-export class AppModule {
-}
+export class AppModule {}

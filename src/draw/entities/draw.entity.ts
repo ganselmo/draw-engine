@@ -4,8 +4,10 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
 } from 'typeorm';
 import { Status } from '../enums/status.enum';
+import { User } from '../../user/entities/user.entity';
 
 @Entity('draws')
 export class Draw {
@@ -32,6 +34,9 @@ export class Draw {
 
   @Column({ type: 'enum', enum: Status, default: Status.DRAFT })
   status: Status;
+
+  @ManyToOne(() => User, (user:User) => user.ownedDraws)
+  owner: User;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
