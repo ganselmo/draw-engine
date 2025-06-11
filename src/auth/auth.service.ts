@@ -59,7 +59,17 @@ export class AuthService {
   }
 
   async logout() {
-    throw new Error('Method not implemented.');
+    throw new InternalServerErrorException('Method not implemented.');
+  }
+
+  async checkEmail(email: string) {
+    const exists = await this.userRepository.exists({ where: { email } });
+    return { exists };
+  }
+
+  async checkUserName(username: string) {
+    const exists = await this.userRepository.exists({ where: { username } });
+    return { exists };
   }
 
   private async findByEmailOrUsername(
