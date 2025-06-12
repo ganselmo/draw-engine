@@ -1,13 +1,19 @@
 export class ResponseDto<T> {
-  success: boolean;
-  message: string;
+  header: {
+    success: boolean;
+    message: string;
+    timestamp: string;
+  };
+
   data?: T;
-  timestamp: string;
 
   constructor(message: string, data?: T, success = true) {
-    this.success = success;
-    this.message = message;
+    this.header = {
+      success,
+      message,
+      timestamp: new Date().toISOString(),
+    };
+
     this.data = data;
-    this.timestamp = new Date().toISOString();
   }
 }

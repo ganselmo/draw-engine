@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -33,10 +34,15 @@ export class AuthService {
     const payload = { sub: user.id };
     const token = this.jwtService.sign(payload);
 
-    return { email: user.email, access_token: token };
+    return { username:user.username,email: user.email, access_token: token };
   }
 
   async register(registerDto: RegisterDto) {
+    if (!registerDto.username && !registerDto.email) {
+      throw new BadRequestException(
+        'You must provide either a username or an email',
+      );
+    }
     const userExists = await this.userRepository.exists({
       where: [{ username: registerDto.username }, { email: registerDto.email }],
     });
@@ -52,7 +58,7 @@ export class AuthService {
       await this.userRepository.save(user);
       const payload = { sub: user.id };
       const token = this.jwtService.sign(payload);
-      return { email: user.email, access_token: token };
+      return { username:user.username,email: user.email, access_token: token };
     } catch (error) {
       throw new InternalServerErrorException('Error creating User');
     }
