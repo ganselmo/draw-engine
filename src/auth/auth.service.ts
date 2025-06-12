@@ -12,6 +12,11 @@ import { User } from '../user/entities/user.entity';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+import { TokenBlacklistService } from './services/token-blacklist.service';
+import { ConfigService } from '@nestjs/config';
+import { extractBearerToken } from './helpers/token-extractor.helper';
+import { plainToInstance } from 'class-transformer';
+import { AuthResponseDto } from './dto/auth-response.dto';
 
 @Injectable()
 export class AuthService {
@@ -19,8 +24,11 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    private readonly tokenBlacklistService: TokenBlacklistService,
+    private readonly configService: ConfigService,
   ) {}
-  async login(loginDto: LoginDto) {
+
+  async login(loginDto: LoginDto): Promise<AuthResponseDto> {
     const user = await this.findByEmailOrUsername(loginDto.user);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
@@ -34,10 +42,14 @@ export class AuthService {
     const payload = { sub: user.id };
     const token = this.jwtService.sign(payload);
 
-    return { username:user.username,email: user.email, access_token: token };
+    return plainToInstance(AuthResponseDto, {
+      username: user.username,
+      email: user.email,
+      access_token: token,
+    });
   }
 
-  async register(registerDto: RegisterDto) {
+  async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
     if (!registerDto.username && !registerDto.email) {
       throw new BadRequestException(
         'You must provide either a username or an email',
@@ -58,22 +70,46 @@ export class AuthService {
       await this.userRepository.save(user);
       const payload = { sub: user.id };
       const token = this.jwtService.sign(payload);
-      return { username:user.username,email: user.email, access_token: token };
+
+      return plainToInstance(AuthResponseDto, {
+        username: user.username,
+        email: user.email,
+        access_token: token,
+      });
     } catch (error) {
-      throw new InternalServerErrorException('Error creating User');
+      throw new InternalServerErrorException('Error Registering User');
     }
   }
 
-  async logout() {
-    throw new InternalServerErrorException('Method not implemented.');
+  async logout(req: Request): Promise<string> {
+    const token = extractBearerToken(req);
+    if (!token) throw new UnauthorizedException('Missing token');
+
+    const decoded = this.jwtService.decode(token) as any;
+    const exp = decoded?.exp;
+
+    let ttl: number;
+
+    if (exp) {
+      const now = Math.floor(Date.now() / 1000);
+      ttl = exp - now;
+    } else {
+      ttl = this.configService.get<number>('JWT_EXPIRATION_TIME', 3600); // fallback
+    }
+
+    if (ttl > 0) {
+      await this.tokenBlacklistService.blacklistToken(token, ttl);
+    }
+
+    return 'Logged out successfully';
   }
 
-  async checkEmail(email: string) {
+  async checkEmail(email: string): Promise<{ exists: boolean }> {
     const exists = await this.userRepository.exists({ where: { email } });
     return { exists };
   }
 
-  async checkUserName(username: string) {
+  async checkUserName(username: string): Promise<{ exists: boolean }> {
     const exists = await this.userRepository.exists({ where: { username } });
     return { exists };
   }

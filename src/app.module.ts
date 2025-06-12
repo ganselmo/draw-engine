@@ -6,6 +6,7 @@ import { SharedModule } from './shared/shared.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TicketModule } from './ticket/ticket.module';
+import { RedisModule, RedisModuleOptions } from '@nestjs-modules/ioredis';
 
 @Module({
   imports: [
@@ -24,6 +25,13 @@ import { TicketModule } from './ticket/ticket.module';
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
         synchronize: true,
+      }),
+    }),
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService): RedisModuleOptions => ({
+        type: 'single',
+        url: `redis://${configService.get<string>('REDIS_HOST', 'localhost')}:${configService.get<number>('REDIS_PORT', 6379)}`,
       }),
     }),
     UserModule,

@@ -6,13 +6,15 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { DrawService } from './draw.service';
 import { Draw } from './entities/draw.entity';
 import { UpdateDrawDto } from './dtos/update-draw.dto';
 import { CreateDrawDto } from './dtos/create-draw.dto';
-import { DeleteResult, UpdateResult } from 'typeorm';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('draws')
 export class DrawController {
   constructor(private readonly drawService: DrawService) {}
