@@ -85,21 +85,7 @@ export class AuthService {
     const token = extractBearerToken(req);
     if (!token) throw new UnauthorizedException('Missing token');
 
-    const decoded = this.jwtService.decode(token) as any;
-    const exp = decoded?.exp;
-
-    let ttl: number;
-
-    if (exp) {
-      const now = Math.floor(Date.now() / 1000);
-      ttl = exp - now;
-    } else {
-      ttl = this.configService.get<number>('JWT_EXPIRATION_TIME', 3600); // fallback
-    }
-
-    if (ttl > 0) {
-      await this.tokenBlacklistService.blacklistToken(token, ttl);
-    }
+    await this.blacklistJWToken(token);
 
     return 'Logged out successfully';
   }
@@ -120,5 +106,29 @@ export class AuthService {
     return this.userRepository.findOne({
       where: [{ email: identifier }, { username: identifier }],
     });
+  }
+
+  private async blacklistJWToken(token: string): Promise<void> {
+    const ttl: number = this.getBlacklistedTtl(token);
+    if (ttl > 0) {
+      await this.tokenBlacklistService.blacklistToken(token, ttl);
+    }
+  }
+
+  private getBlacklistedTtl(token: string): number {
+    const decoded = this.jwtService.decode(token) as { exp?: number } | null;
+    const now = Math.floor(Date.now() / 1000);
+    let ttl: number;
+
+    if (decoded?.exp) {
+      ttl = decoded.exp - now;
+    } else {
+      const fallbackMs = this.configService.get<string>(
+        'JWT_EXPIRATION_TIME',
+        '3600000',
+      );
+      ttl = Math.floor(parseInt(fallbackMs, 10) / 1000);
+    }
+    return ttl;
   }
 }
