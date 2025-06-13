@@ -29,10 +29,20 @@ import { RedisModule, RedisModuleOptions } from '@nestjs-modules/ioredis';
     }),
     RedisModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService): RedisModuleOptions => ({
-        type: 'single',
-        url: `redis://${configService.get<string>('REDIS_HOST', 'localhost')}:${configService.get<number>('REDIS_PORT', 6379)}`,
-      }),
+      useFactory: (configService: ConfigService): RedisModuleOptions => {
+        const host = configService.get<string>('REDIS_HOST', 'localhost');
+        const port = configService.get<number>('REDIS_PORT', 6379);
+        const password = configService.get<string>('REDIS_PASSWORD');
+
+        const url = password
+          ? `redis://:${password}@${host}:${port}`
+          : `redis://${host}:${port}`;
+
+        return {
+          type: 'single',
+          url,
+        };
+      },
     }),
     UserModule,
     AuthModule,
