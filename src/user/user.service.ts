@@ -1,26 +1,54 @@
 import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PasswordChangeDto } from './dto/password-change-dto';
+import { UserResponseDto } from './dto/user-response.dto';
+import { UpdateUserNameDto } from './dto/update-user-name.dto';
+import { UpdateEmailDto } from './dto/update-email.dto';
+import { DeleteUserDto } from './dto/delete-user.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './entities/user.entity';
 
 @Injectable()
 export class UserService {
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  constructor(
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+  ) {}
+
+  async getProfile(id: string): Promise<UserResponseDto> {
+    throw new Error('Method not implemented.');
   }
 
-  findAll() {
-    return `This action returns all user`;
+  async updateProfile(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
+    throw new Error('Method not implemented.');
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async deleteAccount(
+    id: string,
+    deleteUserDto: DeleteUserDto,
+  ): Promise<UserResponseDto> {
+    throw new Error('Method not implemented.');
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async changePassword(
+    id: string,
+    passwordChange: PasswordChangeDto,
+  ): Promise<string> {
+    throw new Error('Method not implemented.');
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async changeEmail(id: string, updateEmailDto: UpdateEmailDto): Promise<string> {
+    throw new Error('Method not implemented.');
+  }
+
+  async changeUserName(
+    id: string,
+    updateUserNameDto: UpdateUserNameDto,
+  ): Promise<string> {
+    throw new Error('Method not implemented.');
   }
 }
