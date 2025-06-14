@@ -5,7 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Draw } from './entities/draw.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Draw])],
+  imports: [ TypeOrmModule.forFeature([Draw])],
   controllers: [DrawController],
   providers: [DrawService],
 })

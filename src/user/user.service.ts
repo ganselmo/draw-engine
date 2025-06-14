@@ -16,12 +16,14 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { plainToInstance } from 'class-transformer';
 import * as argon2 from 'argon2';
+import { TokenBlacklistService } from '../shared/services/token-blacklist.service';
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userRepository: Repository<User>,
+    private readonly tokenBlackListService: TokenBlacklistService,
   ) {}
 
   async getProfile(id: string): Promise<UserResponseDto> {
@@ -45,8 +47,12 @@ export class UserService {
 
   async deleteAccount(
     id: string,
+    token: string | null,
     deleteUserDto: DeleteUserDto,
   ): Promise<UserResponseDto> {
+    if (!token) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
     const user = await this.fetchUserById(id);
 
     const passwordMatches = await this.verifyPassword(
@@ -58,6 +64,7 @@ export class UserService {
 
     try {
       await this.userRepository.delete(id);
+      await this.tokenBlackListService.blacklistToken(token);
       return this.toUserResponseDto(user);
     } catch (error) {
       throw new InternalServerErrorException(`Error deleting User ${error}`);

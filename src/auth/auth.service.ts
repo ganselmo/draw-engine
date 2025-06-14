@@ -12,8 +12,7 @@ import { User } from '../user/entities/user.entity';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { TokenBlacklistService } from './services/token-blacklist.service';
-import { ConfigService } from '@nestjs/config';
+import { TokenBlacklistService } from '../shared/services/token-blacklist.service';
 import { extractBearerToken } from './helpers/token-extractor.helper';
 import { plainToInstance } from 'class-transformer';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -24,8 +23,7 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
-    private readonly tokenBlacklistService: TokenBlacklistService,
-    private readonly configService: ConfigService,
+    private tokenBlackListService:TokenBlacklistService
   ) {}
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -85,7 +83,7 @@ export class AuthService {
     const token = extractBearerToken(req);
     if (!token) throw new UnauthorizedException('Missing token');
 
-    await this.blacklistJWToken(token);
+    await this.tokenBlackListService.blacklistToken(token);
 
     return 'Logged out successfully';
   }
@@ -108,27 +106,4 @@ export class AuthService {
     });
   }
 
-  private async blacklistJWToken(token: string): Promise<void> {
-    const ttl: number = this.getBlacklistedTtl(token);
-    if (ttl > 0) {
-      await this.tokenBlacklistService.blacklistToken(token, ttl);
-    }
-  }
-
-  private getBlacklistedTtl(token: string): number {
-    const decoded = this.jwtService.decode(token) as { exp?: number } | null;
-    const now = Math.floor(Date.now() / 1000);
-    let ttl: number;
-
-    if (decoded?.exp) {
-      ttl = decoded.exp - now;
-    } else {
-      const fallbackMs = this.configService.get<string>(
-        'JWT_EXPIRATION_TIME',
-        '3600000',
-      );
-      ttl = Math.floor(parseInt(fallbackMs, 10) / 1000);
-    }
-    return ttl;
-  }
 }
