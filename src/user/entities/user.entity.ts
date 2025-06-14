@@ -1,4 +1,4 @@
-
+import { Ticket } from '../../ticket/entities/ticket.entity';
 import { Draw } from '../../draw/entities/draw.entity';
 import {
   Entity,
@@ -8,35 +8,39 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
+import { Role } from '../enums/roles.enum';
 
 @Entity()
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true , nullable: true })
+  @Column({ unique: true, nullable: true })
   username?: string;
 
-  @Column({ unique: true , nullable: true})
+  @Column({ unique: true, nullable: true })
   email?: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   password: string;
 
-  @Column()
+  @Column({ type: 'varchar', length: 255 })
   fullName: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   phoneNumber?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   address?: string;
 
-  @OneToMany(() => Draw, draw => draw.owner)
+  @OneToMany(() => Draw, (draw) => draw.owner)
   ownedDraws: Draw[];
 
-//   @OneToMany(() => Ticket, ticket => ticket.user)
-//   tickets: Ticket[];
+  @OneToMany(() => Ticket, (ticket) => ticket.user)
+  ownedTickets: Ticket[];
+
+  @Column({ type: 'enum', enum: Role, default: Role.BUYER })
+  role: Role;
 
   @CreateDateColumn()
   createdAt: Date;

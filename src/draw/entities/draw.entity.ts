@@ -5,9 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { Status } from '../enums/status.enum';
 import { User } from '../../user/entities/user.entity';
+import { Ticket } from '../../ticket/entities/ticket.entity';
 
 @Entity('draws')
 export class Draw {
@@ -35,8 +38,15 @@ export class Draw {
   @Column({ type: 'enum', enum: Status, default: Status.DRAFT })
   status: Status;
 
-  @ManyToOne(() => User, (user:User) => user.ownedDraws)
+  @Column({ type: 'varchar' })
+  ownerId: string;
+
+  @ManyToOne(() => User, (user: User) => user.ownedDraws)
+  @JoinColumn({ name: 'ownerId' })
   owner: User;
+
+  @OneToMany(() => Ticket, (ticket: Ticket) => ticket.draw)
+  tickets: Ticket[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
