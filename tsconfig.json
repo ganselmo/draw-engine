@@ -23,5 +23,5 @@
       "*": ["node_modules/*"]
     }
   },
-  "include": ["src/**/*", "config/data-source.ts"]
+  "include": ["src/**/*"]
 }

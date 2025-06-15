@@ -14,6 +14,9 @@ import { TicketStatus } from './enums/ticket-status.enum';
 import { plainToInstance } from 'class-transformer';
 import { Draw } from '../draw/entities/draw.entity';
 import { runInTransaction } from '../core/utils/transaction.util';
+import { ConfigService } from '@nestjs/config';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis/built';
 
 @Injectable()
 export class TicketService {
@@ -23,6 +26,8 @@ export class TicketService {
     @InjectRepository(Draw)
     private readonly drawRepository: Repository<Draw>,
     private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   async reserveTickets(
@@ -31,8 +36,14 @@ export class TicketService {
   ): Promise<Ticket[]> {
     await this.verifyIfNumberIsInDrawRange(drawId, numbers);
     await this.verifyIfTicketsAreReserved(drawId, numbers);
+    const redisTicketExpirationTime = this.configService.get<number>(
+      'REDIS_TICKET_EXPIRATION_TIME',
+    );
     const reservedDate = new Date();
-    const expirationDate = new Date();
+    const expirationDate = new Date(
+      reservedDate.getTime() +
+        10 * (redisTicketExpirationTime ? redisTicketExpirationTime : 300),
+    );
 
     const ticketData: Partial<Ticket>[] = numbers.map((number) => ({
       drawId,
@@ -44,7 +55,17 @@ export class TicketService {
     }));
     try {
       const tickets = this.ticketRepository.create(ticketData);
-      const savedTickets = await this.ticketRepository.save(tickets);
+      const savedTickets = await runInTransaction(
+        this.dataSource,
+        async (manager) => {
+          return this.createTicketsAndSave(
+            tickets,
+            redisTicketExpirationTime ? redisTicketExpirationTime : 300,
+            manager,
+          );
+        },
+      );
+
       return savedTickets.map((savedTicket) =>
         plainToInstance(Ticket, savedTicket, {
           excludeExtraneousValues: true,
@@ -66,13 +87,16 @@ export class TicketService {
       TicketStatus.RESERVED,
     );
 
-    const confirmedTickets = await runInTransaction(this.dataSource, async (manager) => {
-      return this.updateTicketStatusAndSave(
-        reservedTickets,
-        TicketStatus.PAID,
-        manager,
-      );
-    });
+    const confirmedTickets = await runInTransaction(
+      this.dataSource,
+      async (manager) => {
+        return this.updateTicketStatusAndSave(
+          reservedTickets,
+          TicketStatus.PAID,
+          manager,
+        );
+      },
+    );
 
     return confirmedTickets.map((ticket) =>
       plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
@@ -88,13 +112,16 @@ export class TicketService {
       TicketStatus.RESERVED,
     );
 
-    const cancelledTickets = await runInTransaction(this.dataSource, async (manager) => {
-      return this.updateTicketStatusAndSave(
-        reservedTickets,
-        TicketStatus.PAID,
-        manager,
-      );
-    });
+    const cancelledTickets = await runInTransaction(
+      this.dataSource,
+      async (manager) => {
+        return this.updateTicketStatusAndSave(
+          reservedTickets,
+          TicketStatus.CANCELLED,
+          manager,
+        );
+      },
+    );
     return cancelledTickets.map((ticket) =>
       plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
     );
@@ -148,6 +175,25 @@ export class TicketService {
       if (number > draw.ticketCount)
         throw new ConflictException('Number exceds draw ticket count');
     });
+  }
+
+  private async createTicketsAndSave(
+    tickets: Ticket[],
+    redisTicketExpirationTime: number,
+    manager: EntityManager,
+  ): Promise<Ticket[]> {
+    const createdTickets: Ticket[] = [];
+    for (const ticket of tickets) {
+      const saved = await manager.save(ticket);
+      await this.redis.set(
+        `ticket:expiration:${ticket.id}`,
+        'reserved',
+        'EX',
+        redisTicketExpirationTime,
+      );
+      createdTickets.push(saved);
+    }
+    return createdTickets;
   }
 
   private async updateTicketStatusAndSave(
