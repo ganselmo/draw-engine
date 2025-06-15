@@ -1,26 +1,171 @@
-import { Injectable } from '@nestjs/common';
-import { CreateTicketDto } from './dto/create-ticket.dto';
-import { UpdateTicketDto } from './dto/update-ticket.dto';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { ReserveTicketDto } from './dtos/reserve-ticket.dto';
+import { ConfirmTicketDto } from './dtos/confirm-ticket.dto';
+import { CancelReservedTicketDto } from './dtos/cancel-reserved-ticket.dto';
+import { Ticket } from './entities/ticket.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
+import { TicketStatus } from './enums/ticket-status.enum';
+import { plainToInstance } from 'class-transformer';
+import { Draw } from '../draw/entities/draw.entity';
+import { runInTransaction } from '../core/utils/transaction.util';
 
 @Injectable()
 export class TicketService {
-  create(createTicketDto: CreateTicketDto) {
-    return 'This action adds a new ticket';
+  constructor(
+    @InjectRepository(Ticket)
+    private readonly ticketRepository: Repository<Ticket>,
+    @InjectRepository(Draw)
+    private readonly drawRepository: Repository<Draw>,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async reserveTickets(
+    userId: string,
+    { drawId, numbers }: ReserveTicketDto,
+  ): Promise<Ticket[]> {
+    await this.verifyIfNumberIsInDrawRange(drawId, numbers);
+    await this.verifyIfTicketsAreReserved(drawId, numbers);
+    const reservedDate = new Date();
+    const expirationDate = new Date();
+
+    const ticketData: Partial<Ticket>[] = numbers.map((number) => ({
+      drawId,
+      number,
+      expiresAt: expirationDate,
+      reservedAt: reservedDate,
+      userId,
+      status: TicketStatus.RESERVED,
+    }));
+    try {
+      const tickets = this.ticketRepository.create(ticketData);
+      const savedTickets = await this.ticketRepository.save(tickets);
+      return savedTickets.map((savedTicket) =>
+        plainToInstance(Ticket, savedTicket, {
+          excludeExtraneousValues: true,
+        }),
+      );
+    } catch (error) {
+      throw new InternalServerErrorException(
+        'Error reserving tickets ' + error,
+      );
+    }
+  }
+  async confirmTickets({
+    drawId,
+    numbers,
+  }: ConfirmTicketDto): Promise<Ticket[]> {
+    const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
+      drawId,
+      numbers,
+      TicketStatus.RESERVED,
+    );
+
+    const confirmedTickets = await runInTransaction(this.dataSource, async (manager) => {
+      return this.updateTicketStatusAndSave(
+        reservedTickets,
+        TicketStatus.PAID,
+        manager,
+      );
+    });
+
+    return confirmedTickets.map((ticket) =>
+      plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
+    );
+  }
+  async cancelReservedTickets({
+    drawId,
+    numbers,
+  }: CancelReservedTicketDto): Promise<Ticket[]> {
+    const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
+      drawId,
+      numbers,
+      TicketStatus.RESERVED,
+    );
+
+    const cancelledTickets = await runInTransaction(this.dataSource, async (manager) => {
+      return this.updateTicketStatusAndSave(
+        reservedTickets,
+        TicketStatus.PAID,
+        manager,
+      );
+    });
+    return cancelledTickets.map((ticket) =>
+      plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
+    );
   }
 
-  findAll() {
-    return `This action returns all ticket`;
+  private async verifyIfTicketsAreReserved(
+    drawId: string,
+    numbers: number[],
+  ): Promise<void> {
+    const ticketAreReserved = await this.ticketRepository.find({
+      where: {
+        drawId,
+        number: In(numbers),
+        status: Not(TicketStatus.CANCELLED),
+      },
+    });
+    if (ticketAreReserved.length > 0) {
+      const message =
+        `Some numbers are not available: ` +
+        ticketAreReserved
+          .map((ticket) => `#${ticket.number} (${ticket.status})`)
+          .join(', ');
+      throw new ConflictException(message);
+    }
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} ticket`;
+  private async fetchTicketsByNumbersAndStatus(
+    drawId: string,
+    numbers: number[],
+    status: TicketStatus,
+  ): Promise<Ticket[]> {
+    return await this.ticketRepository.find({
+      where: {
+        drawId,
+        number: In(numbers),
+        status,
+      },
+    });
   }
 
-  update(id: number, updateTicketDto: UpdateTicketDto) {
-    return `This action updates a #${id} ticket`;
+  private async verifyIfNumberIsInDrawRange(
+    drawId: string,
+    numbers: number[],
+  ): Promise<void> {
+    const draw = await this.drawRepository.findOne({
+      where: { id: drawId },
+    });
+    if (!draw) throw new NotFoundException('Draw not found');
+
+    numbers.forEach((number) => {
+      if (number > draw.ticketCount)
+        throw new ConflictException('Number exceds draw ticket count');
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} ticket`;
+  private async updateTicketStatusAndSave(
+    tickets: Ticket[],
+    status: TicketStatus,
+    manager: EntityManager,
+  ): Promise<Ticket[]> {
+    const updatedTickets: Ticket[] = [];
+
+    for (const ticket of tickets) {
+      const updated = manager.merge(Ticket, ticket, {
+        status,
+        expiresAt: undefined,
+      });
+      const saved = await manager.save(updated);
+      updatedTickets.push(saved);
+    }
+
+    return updatedTickets;
   }
 }

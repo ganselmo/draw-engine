@@ -1,37 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { TicketService } from './ticket.service';
-import { CreateTicketDto } from './dto/create-ticket.dto';
-import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { ReserveTicketDto } from './dtos/reserve-ticket.dto';
+import { ConfirmTicketDto } from './dtos/confirm-ticket.dto';
+import { CancelReservedTicketDto } from './dtos/cancel-reserved-ticket.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('tickets')
 export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
-  @Post()
-  create(@Body() createTicketDto: CreateTicketDto) {
-    return this.ticketService.create(createTicketDto);
+  @Post('reserve')
+  reserveTicket(
+    @Req() req: Request,
+    @Body() reserveTicketDto: ReserveTicketDto,
+  ) {
+    const userId = req['user'].sub;
+    return this.ticketService.reserveTickets(userId, reserveTicketDto);
   }
 
-  @Get()
-  findAll() {
-    return this.ticketService.findAll();
+  @Post('cancel-expired')
+  cancelReservedTicket(
+    @Body() cancelReservedTicketDto: CancelReservedTicketDto,
+  ) {
+    return this.ticketService.cancelReservedTickets(cancelReservedTicketDto);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.ticketService.findOne(+id);
+  @Post('confirm')
+  confirmTicket(@Body() confirmTicketDto: ConfirmTicketDto) {
+    return this.ticketService.confirmTickets(confirmTicketDto);
   }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTicketDto: UpdateTicketDto) {
-    return this.ticketService.update(+id, updateTicketDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.ticketService.remove(+id);
-  }
-
-
-  
 }
