@@ -13,6 +13,7 @@ import { Draw } from '../entities/draw.entity';
 import { UpdateDrawDto } from '../dtos/update-draw.dto';
 import { CreateDrawDto } from '../dtos/create-draw.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
+import { DrawResponseDto } from '../dtos/draw-response.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('draws')
@@ -20,16 +21,16 @@ export class DrawController {
   constructor(private readonly drawService: DrawService) {}
 
   @Post()
-  create(@Body() createDrawDTO: CreateDrawDto): Promise<Draw> {
+  create(@Body() createDrawDTO: CreateDrawDto): Promise<DrawResponseDto> {
     return this.drawService.create(createDrawDTO);
   }
 
   @Get()
-  findAll(): Promise<Draw[]> {
+  findAll(): Promise<DrawResponseDto[]> {
     return this.drawService.findAll();
   }
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Draw> {
+  findOne(@Param('id') id: string): Promise<DrawResponseDto> {
     return this.drawService.findOne(id);
   }
 
@@ -37,12 +38,12 @@ export class DrawController {
   update(
     @Param('id') id: string,
     @Body() updateDrawDTO: UpdateDrawDto,
-  ): Promise<Draw> {
+  ): Promise<DrawResponseDto> {
     return this.drawService.update(id, updateDrawDTO);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string): Promise<Draw> {
+  remove(@Param('id') id: string): Promise<DrawResponseDto> {
     return this.drawService.remove(id);
   }
 }

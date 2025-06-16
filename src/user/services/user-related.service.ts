@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Draw } from '../../draw/entities/draw.entity';
 import { TicketResponseDto } from '../../ticket/dtos/ticket-response.dto';
 import { DrawResponseDto } from '../../draw/dtos/draw-response.dto';
+import { plainToInstance } from 'class-transformer';
+import { Ticket } from '../../ticket/entities/ticket.entity';
 
 @Injectable()
 export class UserRelatedService {
@@ -22,16 +24,26 @@ export class UserRelatedService {
       .distinct(true)
       .getMany();
 
-    return participatingDraws;
+    return participatingDraws.map((participatingDraw) => {
+      return plainToInstance(Draw, participatingDraw, {
+        excludeExtraneousValues: true,
+      });
+    });
   }
 
   async getOwnedDraws(id: string): Promise<DrawResponseDto[]> {
     const user = await this.userService.fetchUserById(id);
-    return user.ownedDraws;
+    return user.ownedDraws.map((participatingDraw) => {
+      return plainToInstance(Draw, participatingDraw, {
+        excludeExtraneousValues: true,
+      });
+    });
   }
 
   async getMyTickets(id: string): Promise<TicketResponseDto[]> {
     const user = await this.userService.fetchUserById(id);
-    return user.ownedTickets;
+    return user.ownedTickets.map((ownedTicket) =>
+      plainToInstance(Ticket, ownedTicket, { excludeExtraneousValues: true }),
+    );
   }
 }

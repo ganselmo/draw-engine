@@ -1,7 +1,7 @@
 import { Expose } from 'class-transformer';
 import { Status } from '../enums/status.enum';
-import { User } from '../../user/entities/user.entity';
-import { Ticket } from '../../ticket/entities/ticket.entity';
+import { UserResponseDto } from '../../user/dto/user-response.dto';
+import { TicketResponseDto } from '../../ticket/dtos/ticket-response.dto';
 
 export class DrawResponseDto {
   @Expose()
@@ -29,8 +29,8 @@ export class DrawResponseDto {
   status: Status;
 
   @Expose()
-  owner: User;
+  owner: UserResponseDto;
 
   @Expose()
-  tickets: Ticket[];
+  tickets: TicketResponseDto[];
 }
