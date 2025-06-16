@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { TicketService } from './ticket.service';
-import { TicketController } from './ticket.controller';
+import { TicketService } from './services/ticket.service';
+import { TicketController } from './controller/ticket.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Ticket } from './entities/ticket.entity';
 import { Draw } from '../draw/entities/draw.entity';

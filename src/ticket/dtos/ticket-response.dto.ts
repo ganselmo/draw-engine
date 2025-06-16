@@ -1,8 +1,10 @@
-import { Expose } from "class-transformer";
-import { TicketStatus } from "../enums/ticket-status.enum";
+import { Expose } from 'class-transformer';
+import { TicketStatus } from '../enums/ticket-status.enum';
 
 export class TicketResponseDto {
-  
+  @Expose()
+  id: string;
+
   @Expose()
   number: number;
 
@@ -14,5 +16,4 @@ export class TicketResponseDto {
 
   @Expose()
   reservedAt: Date;
-
 }

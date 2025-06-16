@@ -8,11 +8,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { DrawService } from './draw.service';
-import { Draw } from './entities/draw.entity';
-import { UpdateDrawDto } from './dtos/update-draw.dto';
-import { CreateDrawDto } from './dtos/create-draw.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { DrawService } from '../services/draw.service';
+import { Draw } from '../entities/draw.entity';
+import { UpdateDrawDto } from '../dtos/update-draw.dto';
+import { CreateDrawDto } from '../dtos/create-draw.dto';
+import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('draws')

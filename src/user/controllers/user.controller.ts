@@ -7,31 +7,31 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { UserService } from './user.service';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt.guard';
-import { UserResponseDto } from './dto/user-response.dto';
-import { PasswordChangeDto } from './dto/password-change-dto';
-import { UpdateEmailDto } from './dto/update-email.dto';
-import { UpdateUserNameDto } from './dto/update-user-name.dto';
-import { DeleteUserDto } from './dto/delete-user.dto';
-import { TokenUtilsService } from '../shared/utils/token-utils.service';
+import { UserService } from '../services/user.service';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
+import { UserResponseDto } from '../dto/user-response.dto';
+import { PasswordChangeDto } from '../dto/password-change-dto';
+import { UpdateEmailDto } from '../dto/update-email.dto';
+import { UpdateUserNameDto } from '../dto/update-user-name.dto';
+import { DeleteUserDto } from '../dto/delete-user.dto';
+import { TokenUtilsService } from '../../shared/utils/token-utils.service';
 
 @UseGuards(JwtAuthGuard)
-@Controller('users/me')
+@Controller('users')
 export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly tokenUtilsService: TokenUtilsService,
   ) {}
 
-  @Get()
+  @Get("me")
   getProfile(@Req() req: Request): Promise<UserResponseDto> {
     const id = req['user'].sub;
     return this.userService.getProfile(id);
   }
 
-  @Patch()
+  @Patch("me")
   updateProfile(
     @Req() req: Request,
     @Body() updateUserDto: UpdateUserDto,
@@ -40,7 +40,7 @@ export class UserController {
     return this.userService.updateProfile(id, updateUserDto);
   }
 
-  @Delete()
+  @Delete("me")
   deleteAccount(
     @Req() req: Request,
     @Body() deleteUserDto: DeleteUserDto,
@@ -49,7 +49,7 @@ export class UserController {
     const token = this.tokenUtilsService.getTokenFromRequest(req);
     return this.userService.deleteAccount(id,token, deleteUserDto);
   }
-  @Patch('change-password')
+  @Patch('me/change-password')
   changePassword(
     @Req() req: Request,
     @Body() passwordChange: PasswordChangeDto,
@@ -58,7 +58,7 @@ export class UserController {
     return this.userService.changePassword(id, passwordChange);
   }
 
-  @Patch('change-email')
+  @Patch('me/change-email')
   changeEmail(
     @Req() req: Request,
     @Body() updateEmailDto: UpdateEmailDto,
@@ -67,7 +67,7 @@ export class UserController {
     return this.userService.changeEmail(id, updateEmailDto);
   }
 
-  @Patch('change-username')
+  @Patch('me/change-username')
   changeUserName(
     @Req() req: Request,
     @Body() updateUserNameDto: UpdateUserNameDto,

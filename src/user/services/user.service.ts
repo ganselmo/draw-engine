@@ -5,18 +5,18 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { PasswordChangeDto } from './dto/password-change-dto';
-import { UserResponseDto } from './dto/user-response.dto';
-import { UpdateUserNameDto } from './dto/update-user-name.dto';
-import { UpdateEmailDto } from './dto/update-email.dto';
-import { DeleteUserDto } from './dto/delete-user.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { PasswordChangeDto } from '../dto/password-change-dto';
+import { UserResponseDto } from '../dto/user-response.dto';
+import { UpdateUserNameDto } from '../dto/update-user-name.dto';
+import { UpdateEmailDto } from '../dto/update-email.dto';
+import { DeleteUserDto } from '../dto/delete-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
+import { User } from '../entities/user.entity';
 import { plainToInstance } from 'class-transformer';
 import * as argon2 from 'argon2';
-import { TokenBlacklistService } from '../shared/services/token-blacklist.service';
+import { TokenBlacklistService } from '../../shared/services/token-blacklist.service';
 
 @Injectable()
 export class UserService {
@@ -130,7 +130,7 @@ export class UserService {
     );
   }
 
-  private async fetchUserById(id: string): Promise<User> {
+  async fetchUserById(id: string): Promise<User> {
     const user = await this.userRepository.findOneBy({ id });
     if (!user) {
       throw new NotFoundException(`User not found`);

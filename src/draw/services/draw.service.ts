@@ -3,11 +3,11 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { Draw } from './entities/draw.entity';
+import { Draw } from '../entities/draw.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateDrawDto } from './dtos/create-draw.dto';
-import { UpdateDrawDto } from './dtos/update-draw.dto';
+import { CreateDrawDto } from '../dtos/create-draw.dto';
+import { UpdateDrawDto } from '../dtos/update-draw.dto';
 
 @Injectable()
 export class DrawService {
@@ -57,7 +57,7 @@ export class DrawService {
     }
   }
 
-  private async fetchDrawById(id:string): Promise<Draw> {
+  async fetchDrawById(id:string): Promise<Draw> {
     const draw = await this.drawRepository.findOneBy({ id });
     if (!draw) {
       throw new NotFoundException(`Draw ID ${id} not found`);

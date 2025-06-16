@@ -4,16 +4,16 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ReserveTicketDto } from './dtos/reserve-ticket.dto';
-import { ConfirmTicketDto } from './dtos/confirm-ticket.dto';
-import { CancelReservedTicketDto } from './dtos/cancel-reserved-ticket.dto';
-import { Ticket } from './entities/ticket.entity';
+import { ReserveTicketDto } from '../dtos/reserve-ticket.dto';
+import { ConfirmTicketDto } from '../dtos/confirm-ticket.dto';
+import { CancelReservedTicketDto } from '../dtos/cancel-reserved-ticket.dto';
+import { Ticket } from '../entities/ticket.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
-import { TicketStatus } from './enums/ticket-status.enum';
+import { TicketStatus } from '../enums/ticket-status.enum';
 import { plainToInstance } from 'class-transformer';
-import { Draw } from '../draw/entities/draw.entity';
-import { runInTransaction } from '../core/utils/transaction.util';
+import { Draw } from '../../draw/entities/draw.entity';
+import { runInTransaction } from '../../core/utils/transaction.util';
 import { ConfigService } from '@nestjs/config';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis/built';
@@ -29,6 +29,14 @@ export class TicketService {
     private readonly configService: ConfigService,
     @InjectRedis() private readonly redis: Redis,
   ) {}
+
+  async getTicketById(id: string): Promise<Ticket> {
+    const ticket = await this.ticketRepository.findOne({where:{id}})
+    if(!ticket){
+      throw new NotFoundException('Ticket not found')
+    }
+    return ticket;
+  }
 
   async reserveTickets(
     userId: string,
