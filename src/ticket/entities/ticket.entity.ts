@@ -12,7 +12,7 @@ import {
 } from 'typeorm';
 import { TicketStatus } from '../enums/ticket-status.enum';
 
-@Entity()
+@Entity('tickets')
 export class Ticket {
   @Index(['number', 'drawId'], { unique: true })
   @PrimaryGeneratedColumn('uuid')
