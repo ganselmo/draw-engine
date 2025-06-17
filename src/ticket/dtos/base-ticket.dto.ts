@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
@@ -19,6 +20,6 @@ export abstract class BaseTicketDto {
   @ArrayUnique({ message: 'Duplicate ticket numbers are not allowed' })
   @IsInt({ each: true, message: 'Each ticket number must be an integer' })
   @Min(0, { each: true, message: 'Minimum number is 1' })
-  @MaxLength(maxLength, { message: `Maximum length is ${maxLength}` })
+  @ArrayMaxSize(maxLength, { message: `Maximum length is ${maxLength}` })
   numbers: number[];
 }

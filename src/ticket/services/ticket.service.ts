@@ -17,6 +17,7 @@ import { runInTransaction } from '../../core/utils/transaction.util';
 import { ConfigService } from '@nestjs/config';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis/built';
+import { TicketResponseDto } from '../dtos/ticket-response.dto';
 
 @Injectable()
 export class TicketService {
@@ -28,36 +29,37 @@ export class TicketService {
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     @InjectRedis() private readonly redis: Redis,
-  ) {}
-
-  async getTicketById(id: string): Promise<Ticket> {
-    const ticket = await this.ticketRepository.findOne({where:{id}})
-    if(!ticket){
-      throw new NotFoundException('Ticket not found')
-    }
-    return ticket;
+  ) {
+    this.redisTicketExpirationTime = this.configService.get<number>(
+      'REDIS_TICKET_EXPIRATION_TIME',
+    );
   }
 
+  async getTicketById(id: string): Promise<TicketResponseDto> {
+    const ticket = await this.ticketRepository.findOne({ where: { id } });
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+    return plainToInstance(TicketResponseDto, ticket, {
+      excludeExtraneousValues: true,
+    });
+  }
+  redisTicketExpirationTime: number | undefined;
   async reserveTickets(
     userId: string,
     { drawId, numbers }: ReserveTicketDto,
-  ): Promise<Ticket[]> {
+  ): Promise<TicketResponseDto[]> {
     await this.verifyIfNumberIsInDrawRange(drawId, numbers);
     await this.verifyIfTicketsAreReserved(drawId, numbers);
-    const redisTicketExpirationTime = this.configService.get<number>(
-      'REDIS_TICKET_EXPIRATION_TIME',
-    );
-    const reservedDate = new Date();
-    const expirationDate = new Date(
-      reservedDate.getTime() +
-        10 * (redisTicketExpirationTime ? redisTicketExpirationTime : 300),
+    const expirationDate = this.getExpirationDate(
+      this.redisTicketExpirationTime,
     );
 
     const ticketData: Partial<Ticket>[] = numbers.map((number) => ({
       drawId,
       number,
       expiresAt: expirationDate,
-      reservedAt: reservedDate,
+      reservedAt: new Date(),
       userId,
       status: TicketStatus.RESERVED,
     }));
@@ -68,14 +70,16 @@ export class TicketService {
         async (manager) => {
           return this.createTicketsAndSave(
             tickets,
-            redisTicketExpirationTime ? redisTicketExpirationTime : 300,
+            this.redisTicketExpirationTime
+              ? this.redisTicketExpirationTime
+              : 300,
             manager,
           );
         },
       );
 
       return savedTickets.map((savedTicket) =>
-        plainToInstance(Ticket, savedTicket, {
+        plainToInstance(TicketResponseDto, savedTicket, {
           excludeExtraneousValues: true,
         }),
       );
@@ -85,10 +89,17 @@ export class TicketService {
       );
     }
   }
+  private getExpirationDate(redisTicketExpirationTime: number | undefined) {
+    return new Date(
+      new Date().getTime() +
+        10 * (redisTicketExpirationTime ? redisTicketExpirationTime : 300),
+    );
+  }
+
   async confirmTickets({
     drawId,
     numbers,
-  }: ConfirmTicketDto): Promise<Ticket[]> {
+  }: ConfirmTicketDto): Promise<TicketResponseDto[]> {
     const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
       drawId,
       numbers,
@@ -107,13 +118,15 @@ export class TicketService {
     );
 
     return confirmedTickets.map((ticket) =>
-      plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
+      plainToInstance(TicketResponseDto, ticket, {
+        excludeExtraneousValues: true,
+      }),
     );
   }
   async cancelReservedTickets({
     drawId,
     numbers,
-  }: CancelReservedTicketDto): Promise<Ticket[]> {
+  }: CancelReservedTicketDto): Promise<TicketResponseDto[]> {
     const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
       drawId,
       numbers,
@@ -131,7 +144,9 @@ export class TicketService {
       },
     );
     return cancelledTickets.map((ticket) =>
-      plainToInstance(Ticket, ticket, { excludeExtraneousValues: true }),
+      plainToInstance(TicketResponseDto, ticket, {
+        excludeExtraneousValues: true,
+      }),
     );
   }
 
@@ -194,7 +209,7 @@ export class TicketService {
     for (const ticket of tickets) {
       const saved = await manager.save(ticket);
       await this.redis.set(
-        `ticket:expiration:${ticket.id}`,
+        `ticket:reserved:${ticket.id}`,
         'reserved',
         'EX',
         redisTicketExpirationTime,
@@ -204,6 +219,24 @@ export class TicketService {
     return createdTickets;
   }
 
+  private async reserveCancelledTicketsAndSave(
+    tickets: Ticket[],
+    redisTicketExpirationTime: number,
+    manager: EntityManager,
+  ): Promise<Ticket[]> {
+    const createdTickets: Ticket[] = [];
+    for (const ticket of tickets) {
+      const saved = await manager.save(ticket);
+      await this.redis.set(
+        `ticket:reserved:${ticket.id}`,
+        'reserved',
+        'EX',
+        redisTicketExpirationTime,
+      );
+      createdTickets.push(saved);
+    }
+    return createdTickets;
+  }
   private async updateTicketStatusAndSave(
     tickets: Ticket[],
     status: TicketStatus,
@@ -221,5 +254,13 @@ export class TicketService {
     }
 
     return updatedTickets;
+  }
+
+  async markTicketAsCancelled(id: string): Promise<void> {
+    const ticket = await this.ticketRepository.findOne({ where: { id } });
+    if (!ticket || ticket.status !== TicketStatus.RESERVED) return;
+
+    ticket.status = TicketStatus.CANCELLED;
+    await this.ticketRepository.save(ticket);
   }
 }
