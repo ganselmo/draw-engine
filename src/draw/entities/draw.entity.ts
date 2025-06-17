@@ -29,7 +29,7 @@ export class Draw {
   @Column({ type: 'varchar', length: 255 })
   prize: string;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamp',nullable:true })
   drawDate: Date;
 
   @Column({ default: 100 })

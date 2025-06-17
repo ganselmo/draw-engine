@@ -60,5 +60,3 @@ docker-compose.override.yml
 /config
 
 package-lock.json
-
-/seeds

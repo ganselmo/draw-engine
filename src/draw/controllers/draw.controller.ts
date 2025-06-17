@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { DrawService } from '../services/draw.service';
@@ -21,8 +22,12 @@ export class DrawController {
   constructor(private readonly drawService: DrawService) {}
 
   @Post()
-  create(@Body() createDrawDTO: CreateDrawDto): Promise<DrawResponseDto> {
-    return this.drawService.create(createDrawDTO);
+  create(
+    @Req() req: Request,
+    @Body() createDrawDTO: CreateDrawDto,
+  ): Promise<DrawResponseDto> {
+    const ownerId = req['user'].sub;
+    return this.drawService.create(ownerId, createDrawDTO);
   }
 
   @Get()

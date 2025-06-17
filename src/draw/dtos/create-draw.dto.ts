@@ -1,3 +1,4 @@
+import { Optional } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
   IsString,
@@ -25,7 +26,8 @@ export class CreateDrawDto {
   prize: string;
 
   @IsDateString()
-  drawDate: string;
+  @IsOptional()
+  drawDate?: string;
 
   @IsInt()
   @Min(100)

@@ -18,9 +18,9 @@ export class DrawService {
     private drawRepository: Repository<Draw>,
   ) {}
 
-  async create(createDrawDTO: CreateDrawDto): Promise<DrawResponseDto> {
+  async create(ownerId,createDrawDTO: CreateDrawDto): Promise<DrawResponseDto> {
     try {
-      const draw = this.drawRepository.create(createDrawDTO);
+      const draw = this.drawRepository.create({...createDrawDTO,ownerId});
       const savedDraw = await this.drawRepository.save(draw);
 
       return plainToInstance(DrawResponseDto, savedDraw, {
