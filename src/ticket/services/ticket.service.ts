@@ -21,6 +21,8 @@ import { TicketResponseDto } from '../dtos/ticket-response.dto';
 
 @Injectable()
 export class TicketService {
+  redisTicketExpirationTime: number | undefined;
+
   constructor(
     @InjectRepository(Ticket)
     private readonly ticketRepository: Repository<Ticket>,
@@ -44,7 +46,7 @@ export class TicketService {
       excludeExtraneousValues: true,
     });
   }
-  redisTicketExpirationTime: number | undefined;
+
   async reserveTickets(
     userId: string,
     { drawId, numbers }: ReserveTicketDto,
@@ -55,21 +57,45 @@ export class TicketService {
       this.redisTicketExpirationTime,
     );
 
-    const ticketData: Partial<Ticket>[] = numbers.map((number) => ({
-      drawId,
-      number,
-      expiresAt: expirationDate,
-      reservedAt: new Date(),
-      userId,
-      status: TicketStatus.RESERVED,
-    }));
+    const ticketsCanceled = await this.ticketRepository.find({
+      where: { drawId, number: In(numbers), status:TicketStatus.CANCELLED },
+    });
+
+    const ticketNumbersCanceled = ticketsCanceled.map(
+      (ticket) => ticket.number,
+    );
+    const ticketNumbersToCreate = numbers.filter(
+      (number) => !ticketNumbersCanceled.includes(number),
+    );
+
+    const ticketDataToCreate: Partial<Ticket>[] = ticketNumbersToCreate.map(
+      (number) => ({
+        drawId,
+        number,
+        expiresAt: expirationDate,
+        reservedAt: new Date(),
+        userId,
+        status: TicketStatus.RESERVED,
+      }),
+    );
+    const ticketsToCreate = this.ticketRepository.create(ticketDataToCreate);
+
+    const ticketsToReuse = ticketsCanceled.map((ticketToReuse) =>
+      this.ticketRepository.merge(ticketToReuse, {
+        expiresAt: expirationDate,
+        reservedAt: new Date(),
+        userId,
+        status: TicketStatus.RESERVED,
+      }),
+    );
+    const ticketsToSave = [ticketsToCreate, ticketsToReuse].flat()
+    console.log(ticketsToSave)
     try {
-      const tickets = this.ticketRepository.create(ticketData);
       const savedTickets = await runInTransaction(
         this.dataSource,
         async (manager) => {
-          return this.createTicketsAndSave(
-            tickets,
+          return this.reserveTicketsWithReuse(
+            ticketsToSave,
             this.redisTicketExpirationTime
               ? this.redisTicketExpirationTime
               : 300,
@@ -105,7 +131,7 @@ export class TicketService {
       numbers,
       TicketStatus.RESERVED,
     );
-
+    
     const confirmedTickets = await runInTransaction(
       this.dataSource,
       async (manager) => {
@@ -200,12 +226,13 @@ export class TicketService {
     });
   }
 
-  private async createTicketsAndSave(
+  private async reserveTicketsWithReuse(
     tickets: Ticket[],
     redisTicketExpirationTime: number,
     manager: EntityManager,
   ): Promise<Ticket[]> {
-    const createdTickets: Ticket[] = [];
+    const reservationTickets: Ticket[] = [];
+
     for (const ticket of tickets) {
       const saved = await manager.save(ticket);
       await this.redis.set(
@@ -214,29 +241,11 @@ export class TicketService {
         'EX',
         redisTicketExpirationTime,
       );
-      createdTickets.push(saved);
+      reservationTickets.push(saved);
     }
-    return createdTickets;
+    return reservationTickets;
   }
 
-  private async reserveCancelledTicketsAndSave(
-    tickets: Ticket[],
-    redisTicketExpirationTime: number,
-    manager: EntityManager,
-  ): Promise<Ticket[]> {
-    const createdTickets: Ticket[] = [];
-    for (const ticket of tickets) {
-      const saved = await manager.save(ticket);
-      await this.redis.set(
-        `ticket:reserved:${ticket.id}`,
-        'reserved',
-        'EX',
-        redisTicketExpirationTime,
-      );
-      createdTickets.push(saved);
-    }
-    return createdTickets;
-  }
   private async updateTicketStatusAndSave(
     tickets: Ticket[],
     status: TicketStatus,

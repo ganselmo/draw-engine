@@ -6,6 +6,7 @@ import {
   Req,
   Get,
   Param,
+  Patch,
 } from '@nestjs/common';
 import { TicketService } from '../services/ticket.service';
 import { ReserveTicketDto } from '../dtos/reserve-ticket.dto';
@@ -33,14 +34,14 @@ export class TicketController {
     return this.ticketService.reserveTickets(userId, reserveTicketDto);
   }
 
-  @Post('cancel-expired')
+  @Patch('cancel-expired')
   cancelReservedTicket(
     @Body() cancelReservedTicketDto: CancelReservedTicketDto,
   ): Promise<TicketResponseDto[]> {
     return this.ticketService.cancelReservedTickets(cancelReservedTicketDto);
   }
 
-  @Post('confirm')
+  @Patch('confirm')
   confirmTicket(
     @Body() confirmTicketDto: ConfirmTicketDto,
   ): Promise<TicketResponseDto[]> {
