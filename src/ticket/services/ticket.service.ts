@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis/built';
 import { TicketResponseDto } from '../dtos/ticket-response.dto';
+import { TicketConfirmationResponseDto } from '../dtos/ticket-confirmation-response.dto';
 
 @Injectable()
 export class TicketService {
@@ -58,7 +59,7 @@ export class TicketService {
     );
 
     const ticketsCanceled = await this.ticketRepository.find({
-      where: { drawId, number: In(numbers), status:TicketStatus.CANCELLED },
+      where: { drawId, number: In(numbers), status: TicketStatus.CANCELLED },
     });
 
     const ticketNumbersCanceled = ticketsCanceled.map(
@@ -88,8 +89,8 @@ export class TicketService {
         status: TicketStatus.RESERVED,
       }),
     );
-    const ticketsToSave = [ticketsToCreate, ticketsToReuse].flat()
-    console.log(ticketsToSave)
+    const ticketsToSave = [...ticketsToCreate, ...ticketsToReuse];
+    console.log(ticketsToSave);
     try {
       const savedTickets = await runInTransaction(
         this.dataSource,
@@ -104,11 +105,7 @@ export class TicketService {
         },
       );
 
-      return savedTickets.map((savedTicket) =>
-        plainToInstance(TicketResponseDto, savedTicket, {
-          excludeExtraneousValues: true,
-        }),
-      );
+      return this.serializeTickets(savedTickets);
     } catch (error) {
       throw new InternalServerErrorException(
         'Error reserving tickets ' + error,
@@ -125,13 +122,20 @@ export class TicketService {
   async confirmTickets({
     drawId,
     numbers,
-  }: ConfirmTicketDto): Promise<TicketResponseDto[]> {
-    const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
-      drawId,
-      numbers,
-      TicketStatus.RESERVED,
+  }: ConfirmTicketDto): Promise<TicketConfirmationResponseDto> {
+    const tickets = await this.fetchTicketsByNumbers(drawId, numbers);
+
+    const reservedTickets = tickets.filter(
+      (ticket) => ticket.status === TicketStatus.RESERVED,
     );
-    
+    const notConfirmedTickets = tickets.filter(
+      (ticket) => ticket.status != TicketStatus.RESERVED,
+    );
+    await Promise.all(
+      reservedTickets.map((reservedTicket) =>
+        this.redis.del(`ticket:reserved:${reservedTicket.id}`),
+      ),
+    );
     const confirmedTickets = await runInTransaction(
       this.dataSource,
       async (manager) => {
@@ -143,12 +147,27 @@ export class TicketService {
       },
     );
 
-    return confirmedTickets.map((ticket) =>
-      plainToInstance(TicketResponseDto, ticket, {
+    const responseNotConfirmedTickets =
+      this.serializeTickets(notConfirmedTickets);
+    const responseConfirmedTickets = this.serializeTickets(confirmedTickets);
+
+    return plainToInstance(
+      TicketConfirmationResponseDto,
+      {
+        confirmedTickets:
+          responseConfirmedTickets.length > 0 ? responseConfirmedTickets : undefined,
+
+        notConfirmedTickets:
+          responseNotConfirmedTickets.length > 0
+            ? responseNotConfirmedTickets
+            : undefined,
+      },
+      {
         excludeExtraneousValues: true,
-      }),
+      },
     );
   }
+
   async cancelReservedTickets({
     drawId,
     numbers,
@@ -169,11 +188,7 @@ export class TicketService {
         );
       },
     );
-    return cancelledTickets.map((ticket) =>
-      plainToInstance(TicketResponseDto, ticket, {
-        excludeExtraneousValues: true,
-      }),
-    );
+    return this.serializeTickets(cancelledTickets);
   }
 
   private async verifyIfTicketsAreReserved(
@@ -183,8 +198,7 @@ export class TicketService {
     const ticketAreReserved = await this.ticketRepository.find({
       where: {
         drawId,
-        number: In(numbers),
-        status: Not(TicketStatus.CANCELLED),
+        number: In(numbers)
       },
     });
     if (ticketAreReserved.length > 0) {
@@ -207,6 +221,18 @@ export class TicketService {
         drawId,
         number: In(numbers),
         status,
+      },
+    });
+  }
+
+  private async fetchTicketsByNumbers(
+    drawId: string,
+    numbers: number[],
+  ): Promise<Ticket[]> {
+    return await this.ticketRepository.find({
+      where: {
+        drawId,
+        number: In(numbers),
       },
     });
   }
@@ -271,5 +297,12 @@ export class TicketService {
 
     ticket.status = TicketStatus.CANCELLED;
     await this.ticketRepository.save(ticket);
+  }
+  private serializeTickets(tickets: Ticket[]): TicketResponseDto[] {
+    return tickets.map((ticket) =>
+      plainToInstance(TicketResponseDto, ticket, {
+        excludeExtraneousValues: true,
+      }),
+    );
   }
 }

@@ -14,6 +14,7 @@ import { ConfirmTicketDto } from '../dtos/confirm-ticket.dto';
 import { CancelReservedTicketDto } from '../dtos/cancel-reserved-ticket.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { TicketResponseDto } from '../dtos/ticket-response.dto';
+import { TicketConfirmationResponseDto } from '../dtos/ticket-confirmation-response.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tickets')
@@ -44,7 +45,7 @@ export class TicketController {
   @Patch('confirm')
   confirmTicket(
     @Body() confirmTicketDto: ConfirmTicketDto,
-  ): Promise<TicketResponseDto[]> {
+  ): Promise<TicketConfirmationResponseDto> {
     return this.ticketService.confirmTickets(confirmTicketDto);
   }
 }
