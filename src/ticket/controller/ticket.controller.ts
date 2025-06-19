@@ -15,6 +15,7 @@ import { CancelReservedTicketDto } from '../dtos/cancel-reserved-ticket.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt.guard';
 import { TicketResponseDto } from '../dtos/ticket-response.dto';
 import { TicketConfirmationResponseDto } from '../dtos/ticket-confirmation-response.dto';
+import { TicketReservationResponseDto } from '../dtos/ticket-reservation-response.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tickets')
@@ -30,7 +31,7 @@ export class TicketController {
   reserveTicket(
     @Req() req: Request,
     @Body() reserveTicketDto: ReserveTicketDto,
-  ): Promise<TicketResponseDto[]> {
+  ): Promise<TicketReservationResponseDto> {
     const userId = req['user'].sub;
     return this.ticketService.reserveTickets(userId, reserveTicketDto);
   }

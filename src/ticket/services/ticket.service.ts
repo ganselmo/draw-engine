@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,33 +7,36 @@ import { ReserveTicketDto } from '../dtos/reserve-ticket.dto';
 import { ConfirmTicketDto } from '../dtos/confirm-ticket.dto';
 import { CancelReservedTicketDto } from '../dtos/cancel-reserved-ticket.dto';
 import { Ticket } from '../entities/ticket.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Not, Repository } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { TicketStatus } from '../enums/ticket-status.enum';
 import { plainToInstance } from 'class-transformer';
-import { Draw } from '../../draw/entities/draw.entity';
 import { runInTransaction } from '../../core/utils/transaction.util';
 import { ConfigService } from '@nestjs/config';
-import { InjectRedis } from '@nestjs-modules/ioredis';
-import Redis from 'ioredis/built';
 import { TicketResponseDto } from '../dtos/ticket-response.dto';
 import { TicketConfirmationResponseDto } from '../dtos/ticket-confirmation-response.dto';
+import { TicketReservationResponseDto } from '../dtos/ticket-reservation-response.dto';
+import { TicketHelperService } from './ticket.helper.service';
+import { TicketPersistenceService } from './ticket-persistence.service';
+import { TicketRepository } from '../repositories/ticket.repository';
+
+type TicketRepositoryType = ReturnType<typeof TicketRepository>;
 
 @Injectable()
 export class TicketService {
   redisTicketExpirationTime: number | undefined;
 
+  private readonly ticketRepository: TicketRepositoryType;
   constructor(
-    @InjectRepository(Ticket)
-    private readonly ticketRepository: Repository<Ticket>,
-    @InjectRepository(Draw)
-    private readonly drawRepository: Repository<Draw>,
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
-    @InjectRedis() private readonly redis: Redis,
+    private readonly ticketHelperService: TicketHelperService,
+    private readonly ticketPersistenceService: TicketPersistenceService,
   ) {
     this.redisTicketExpirationTime = this.configService.get<number>(
       'REDIS_TICKET_EXPIRATION_TIME',
+    );
+    this.ticketRepository = TicketRepository(
+      this.dataSource.getRepository(Ticket),
     );
   }
 
@@ -51,21 +53,35 @@ export class TicketService {
   async reserveTickets(
     userId: string,
     { drawId, numbers }: ReserveTicketDto,
-  ): Promise<TicketResponseDto[]> {
-    await this.verifyIfNumberIsInDrawRange(drawId, numbers);
-    await this.verifyIfTicketsAreReserved(drawId, numbers);
-    const expirationDate = this.getExpirationDate(
+  ): Promise<TicketReservationResponseDto> {
+    await this.ticketHelperService.verifyIfNumberIsInDrawRange(drawId, numbers);
+    const unavailableTickets: Ticket[] =
+      await this.ticketRepository.findUnavailableTickets(drawId, numbers);
+
+      
+    const requestedUnavailableNumbers = unavailableTickets.map(
+      (ticket) => ticket.number,
+    );
+    const availableNumbers = numbers.filter((number) =>
+      !requestedUnavailableNumbers.includes(number),
+    );
+
+    const expirationDate = this.ticketHelperService.getExpirationDate(
       this.redisTicketExpirationTime,
     );
 
     const ticketsCanceled = await this.ticketRepository.find({
-      where: { drawId, number: In(numbers), status: TicketStatus.CANCELLED },
+      where: {
+        drawId,
+        number: In(availableNumbers),
+        status: TicketStatus.CANCELLED,
+      },
     });
 
     const ticketNumbersCanceled = ticketsCanceled.map(
       (ticket) => ticket.number,
     );
-    const ticketNumbersToCreate = numbers.filter(
+    const ticketNumbersToCreate = availableNumbers.filter(
       (number) => !ticketNumbersCanceled.includes(number),
     );
 
@@ -79,6 +95,7 @@ export class TicketService {
         status: TicketStatus.RESERVED,
       }),
     );
+
     const ticketsToCreate = this.ticketRepository.create(ticketDataToCreate);
 
     const ticketsToReuse = ticketsCanceled.map((ticketToReuse) =>
@@ -89,13 +106,14 @@ export class TicketService {
         status: TicketStatus.RESERVED,
       }),
     );
+
     const ticketsToSave = [...ticketsToCreate, ...ticketsToReuse];
-    console.log(ticketsToSave);
+
     try {
       const savedTickets = await runInTransaction(
         this.dataSource,
         async (manager) => {
-          return this.reserveTicketsWithReuse(
+          return this.ticketPersistenceService.reserveTicketsWithReuse(
             ticketsToSave,
             this.redisTicketExpirationTime
               ? this.redisTicketExpirationTime
@@ -105,25 +123,35 @@ export class TicketService {
         },
       );
 
-      return this.serializeTickets(savedTickets);
+      return plainToInstance(
+        TicketReservationResponseDto,
+        {
+          reservedTickets:
+            savedTickets.length > 0
+              ? this.ticketHelperService.serializeTickets(savedTickets)
+              : undefined,
+          unavailableTickets:
+            unavailableTickets.length > 0
+              ? this.ticketHelperService.serializeTickets(unavailableTickets)
+              : undefined,
+        },
+        { excludeExtraneousValues: true },
+      );
     } catch (error) {
       throw new InternalServerErrorException(
         'Error reserving tickets ' + error,
       );
     }
   }
-  private getExpirationDate(redisTicketExpirationTime: number | undefined) {
-    return new Date(
-      new Date().getTime() +
-        10 * (redisTicketExpirationTime ? redisTicketExpirationTime : 300),
-    );
-  }
 
   async confirmTickets({
     drawId,
     numbers,
   }: ConfirmTicketDto): Promise<TicketConfirmationResponseDto> {
-    const tickets = await this.fetchTicketsByNumbers(drawId, numbers);
+    const tickets: Ticket[] = await this.ticketRepository.findTicketsByNumbers(
+      drawId,
+      numbers,
+    );
 
     const reservedTickets = tickets.filter(
       (ticket) => ticket.status === TicketStatus.RESERVED,
@@ -131,15 +159,12 @@ export class TicketService {
     const notConfirmedTickets = tickets.filter(
       (ticket) => ticket.status != TicketStatus.RESERVED,
     );
-    await Promise.all(
-      reservedTickets.map((reservedTicket) =>
-        this.redis.del(`ticket:reserved:${reservedTicket.id}`),
-      ),
-    );
+    await this.ticketPersistenceService.deleteRedisKeys(reservedTickets);
+
     const confirmedTickets = await runInTransaction(
       this.dataSource,
       async (manager) => {
-        return this.updateTicketStatusAndSave(
+        return this.ticketPersistenceService.updateTicketStatusAndSave(
           reservedTickets,
           TicketStatus.PAID,
           manager,
@@ -147,19 +172,17 @@ export class TicketService {
       },
     );
 
-    const responseNotConfirmedTickets =
-      this.serializeTickets(notConfirmedTickets);
-    const responseConfirmedTickets = this.serializeTickets(confirmedTickets);
-
     return plainToInstance(
       TicketConfirmationResponseDto,
       {
         confirmedTickets:
-          responseConfirmedTickets.length > 0 ? responseConfirmedTickets : undefined,
+          confirmedTickets.length > 0
+            ? this.ticketHelperService.serializeTickets(confirmedTickets)
+            : undefined,
 
         notConfirmedTickets:
-          responseNotConfirmedTickets.length > 0
-            ? responseNotConfirmedTickets
+          notConfirmedTickets.length > 0
+            ? this.ticketHelperService.serializeTickets(notConfirmedTickets)
             : undefined,
       },
       {
@@ -172,137 +195,30 @@ export class TicketService {
     drawId,
     numbers,
   }: CancelReservedTicketDto): Promise<TicketResponseDto[]> {
-    const reservedTickets = await this.fetchTicketsByNumbersAndStatus(
-      drawId,
-      numbers,
-      TicketStatus.RESERVED,
-    );
+    const reservedTickets =
+      await this.ticketRepository.fetchTicketsByNumbersAndStatus(
+        drawId,
+        numbers,
+        TicketStatus.RESERVED,
+      );
 
     const cancelledTickets = await runInTransaction(
       this.dataSource,
       async (manager) => {
-        return this.updateTicketStatusAndSave(
+        return this.ticketPersistenceService.updateTicketStatusAndSave(
           reservedTickets,
           TicketStatus.CANCELLED,
           manager,
         );
       },
     );
-    return this.serializeTickets(cancelledTickets);
-  }
-
-  private async verifyIfTicketsAreReserved(
-    drawId: string,
-    numbers: number[],
-  ): Promise<void> {
-    const ticketAreReserved = await this.ticketRepository.find({
-      where: {
-        drawId,
-        number: In(numbers)
-      },
-    });
-    if (ticketAreReserved.length > 0) {
-      const message =
-        `Some numbers are not available: ` +
-        ticketAreReserved
-          .map((ticket) => `#${ticket.number} (${ticket.status})`)
-          .join(', ');
-      throw new ConflictException(message);
-    }
-  }
-
-  private async fetchTicketsByNumbersAndStatus(
-    drawId: string,
-    numbers: number[],
-    status: TicketStatus,
-  ): Promise<Ticket[]> {
-    return await this.ticketRepository.find({
-      where: {
-        drawId,
-        number: In(numbers),
-        status,
-      },
-    });
-  }
-
-  private async fetchTicketsByNumbers(
-    drawId: string,
-    numbers: number[],
-  ): Promise<Ticket[]> {
-    return await this.ticketRepository.find({
-      where: {
-        drawId,
-        number: In(numbers),
-      },
-    });
-  }
-
-  private async verifyIfNumberIsInDrawRange(
-    drawId: string,
-    numbers: number[],
-  ): Promise<void> {
-    const draw = await this.drawRepository.findOne({
-      where: { id: drawId },
-    });
-    if (!draw) throw new NotFoundException('Draw not found');
-
-    numbers.forEach((number) => {
-      if (number > draw.ticketCount)
-        throw new ConflictException('Number exceds draw ticket count');
-    });
-  }
-
-  private async reserveTicketsWithReuse(
-    tickets: Ticket[],
-    redisTicketExpirationTime: number,
-    manager: EntityManager,
-  ): Promise<Ticket[]> {
-    const reservationTickets: Ticket[] = [];
-
-    for (const ticket of tickets) {
-      const saved = await manager.save(ticket);
-      await this.redis.set(
-        `ticket:reserved:${ticket.id}`,
-        'reserved',
-        'EX',
-        redisTicketExpirationTime,
-      );
-      reservationTickets.push(saved);
-    }
-    return reservationTickets;
-  }
-
-  private async updateTicketStatusAndSave(
-    tickets: Ticket[],
-    status: TicketStatus,
-    manager: EntityManager,
-  ): Promise<Ticket[]> {
-    const updatedTickets: Ticket[] = [];
-
-    for (const ticket of tickets) {
-      const updated = manager.merge(Ticket, ticket, {
-        status,
-        expiresAt: undefined,
-      });
-      const saved = await manager.save(updated);
-      updatedTickets.push(saved);
-    }
-
-    return updatedTickets;
+    return this.ticketHelperService.serializeTickets(cancelledTickets);
   }
 
   async markTicketAsCancelled(id: string): Promise<void> {
     const ticket = await this.ticketRepository.findOne({ where: { id } });
     if (!ticket || ticket.status !== TicketStatus.RESERVED) return;
-
     ticket.status = TicketStatus.CANCELLED;
     await this.ticketRepository.save(ticket);
-  }
-  private serializeTickets(tickets: Ticket[]): TicketResponseDto[] {
-    return tickets.map((ticket) =>
-      plainToInstance(TicketResponseDto, ticket, {
-        excludeExtraneousValues: true,
-      }),
-    );
   }
 }
