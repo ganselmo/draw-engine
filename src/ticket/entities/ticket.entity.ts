@@ -21,6 +21,7 @@ export class Ticket {
   @Column({ type: 'int' })
   number: number;
 
+  @Index()
   @Column({ type: 'varchar' })
   drawId: string;
 
@@ -34,7 +35,7 @@ export class Ticket {
   @Column({ nullable: true })
   userId: string;
 
-  @ManyToOne(() => User, (user) => user.ownedTickets,{ nullable: true })
+  @ManyToOne(() => User, (user) => user.ownedTickets, { nullable: true })
   @JoinColumn({ name: 'userId' })
   user: User;
 
