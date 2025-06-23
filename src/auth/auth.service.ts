@@ -5,8 +5,8 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dtos/login.dto';
+import { RegisterDto } from './dtos/register.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../user/entities/user.entity';
 import { Repository } from 'typeorm';
@@ -15,7 +15,7 @@ import * as argon2 from 'argon2';
 import { TokenBlacklistService } from '../shared/services/token-blacklist.service';
 import { extractBearerToken } from './helpers/token-extractor.helper';
 import { plainToInstance } from 'class-transformer';
-import { AuthResponseDto } from './dto/auth-response.dto';
+import { AuthResponseDto } from './dtos/auth-response.dto';
 
 @Injectable()
 export class AuthService {

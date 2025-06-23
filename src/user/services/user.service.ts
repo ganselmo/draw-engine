@@ -5,12 +5,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UpdateUserDto } from '../dto/update-user.dto';
-import { PasswordChangeDto } from '../dto/password-change-dto';
-import { UserResponseDto } from '../dto/user-response.dto';
-import { UpdateUserNameDto } from '../dto/update-user-name.dto';
-import { UpdateEmailDto } from '../dto/update-email.dto';
-import { DeleteUserDto } from '../dto/delete-user.dto';
+import { UpdateUserDto } from '../dtos/update-user.dto';
+import { PasswordChangeDto } from '../dtos/password-change-dto';
+import { UserResponseDto } from '../dtos/user-response.dto';
+import { UpdateUserNameDto } from '../dtos/update-user-name.dto';
+import { UpdateEmailDto } from '../dtos/update-email.dto';
+import { DeleteUserDto } from '../dtos/delete-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
